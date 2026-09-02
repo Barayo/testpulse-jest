@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.testpulse/
+coverage/
+*.log
+test/fixtures/**/junit.xml
+test/fixtures/**/.testpulse/
+test/fixtures/**/node_modules/

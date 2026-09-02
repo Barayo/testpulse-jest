@@ -1,0 +1,44 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    if: github.repository == 'Barayo/testpulse-jest'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - run: npm run build
+      - name: Semantic release (version, changelog, tag, GitHub release, publish to npm via OIDC trusted publishing)
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release
+      - name: Publish already-tagged version (manual recovery)
+        # Mirrors testpulse-annotations/testpulse-maven-plugin's own recovery
+        # step: semantic-release's git-tag push happens before the publish
+        # step even attempts npm, so a failed publish can still leave a real
+        # tag with nothing actually published for it. A manual dispatch here
+        # just publishes whatever's currently checked out, via the same OIDC
+        # trusted-publishing flow (no NPM_TOKEN secret exists to fall back to).
+        if: github.event_name == 'workflow_dispatch'
+        run: npm publish
