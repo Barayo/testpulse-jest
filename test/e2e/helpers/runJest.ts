@@ -13,14 +13,19 @@ export interface JestRunResult {
 export async function runNestedJest(
   cwd: string,
   configPath: string,
-  extraEnv: Record<string, string> = {}
+  extraEnv: Record<string, string> = {},
+  extraArgs: string[] = []
 ): Promise<JestRunResult> {
   const jestBin = require.resolve('jest/bin/jest');
   try {
-    const { stdout, stderr } = await execFileAsync(process.execPath, [jestBin, '--config', configPath, '--ci'], {
-      cwd,
-      env: { ...process.env, ...extraEnv },
-    });
+    const { stdout, stderr } = await execFileAsync(
+      process.execPath,
+      [jestBin, '--config', configPath, '--ci', ...extraArgs],
+      {
+        cwd,
+        env: { ...process.env, ...extraEnv },
+      }
+    );
     return { exitCode: 0, stdout, stderr };
   } catch (err) {
     const e = err as { code?: number; stdout?: string; stderr?: string };

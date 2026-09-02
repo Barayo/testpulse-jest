@@ -4,6 +4,7 @@ import * as path from 'path';
 import { testpulseAttach } from '../../src/testpulseAttach';
 import { writeCaseMetadata } from '../../src/caseStore';
 import { setScratchDir, __resetScratchDirForTests, hashFullName, attachmentsDir } from '../../src/scratchDir';
+import { MAX_ATTACHMENT_BYTES } from '../../src/attachmentStore';
 
 function withMockedCurrentTestName<T>(name: string, fn: () => T): T {
   const originalExpect = (global as unknown as { expect?: unknown }).expect;
@@ -74,6 +75,18 @@ describe('testpulseAttach()', () => {
     );
 
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('untagged test'));
+    const entries = fs.existsSync(attachmentsDir(tmpDir)) ? fs.readdirSync(attachmentsDir(tmpDir)) : [];
+    expect(entries).toEqual([]);
+  });
+
+  it('rejects an attachment larger than the size cap, without writing it', async () => {
+    writeCaseMetadata(tmpDir, 'a test', 'LOGIN-1');
+    const tooBig = Buffer.alloc(MAX_ATTACHMENT_BYTES + 1);
+
+    await expect(
+      withMockedCurrentTestName('a test', () => testpulseAttach(tooBig, { filename: 'huge.png', contentType: 'image/png' }))
+    ).rejects.toThrow(/exceeding/);
+
     const entries = fs.existsSync(attachmentsDir(tmpDir)) ? fs.readdirSync(attachmentsDir(tmpDir)) : [];
     expect(entries).toEqual([]);
   });

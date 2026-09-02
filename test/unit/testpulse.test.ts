@@ -3,6 +3,15 @@ import * as os from 'os';
 import * as path from 'path';
 import { testpulse } from '../../src/testpulse';
 import { setScratchDir, __resetScratchDirForTests, hashFullName, casesDir } from '../../src/scratchDir';
+import * as describeStack from '../../src/describeStack';
+
+// describeStack's own patching mechanism is tested in isolation in
+// describeStack.test.ts (module patching needs jest.isolateModules to
+// avoid mutating this file's own real global describe). Here,
+// getDescribeStack is mocked directly so testpulse()'s registration-time
+// write can be tested deterministically without real describe nesting.
+jest.mock('../../src/describeStack');
+const mockedDescribeStack = describeStack as jest.Mocked<typeof describeStack>;
 
 function withMockedGlobalTest<T>(fn: () => T): { result: T; registrarSpy: jest.Mock } {
   const registrarSpy = jest.fn();
@@ -34,11 +43,43 @@ describe('testpulse()', () => {
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'testpulse-jest-'));
     setScratchDir(tmpDir);
+    mockedDescribeStack.getDescribeStack.mockReturnValue([]);
   });
 
   afterEach(() => {
     __resetScratchDirForTests();
     fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('writes the case-key sidecar at registration time, before the test body ever runs', () => {
+    const fn = jest.fn();
+    withMockedGlobalTest(() => {
+      // The mocked registrar never invokes fn -- simulating a test that
+      // Jest registers but never runs (a -t filter, a sibling .only,
+      // --bail, a partial watch-mode run).
+      testpulse('LOGIN-42')('never actually runs', fn);
+    });
+
+    expect(fn).not.toHaveBeenCalled();
+    const sidecarPath = path.join(casesDir(tmpDir), `${hashFullName('never actually runs')}.json`);
+    expect(fs.existsSync(sidecarPath)).toBe(true);
+    expect(JSON.parse(fs.readFileSync(sidecarPath, 'utf8'))).toEqual({
+      fullName: 'never actually runs',
+      caseKey: 'LOGIN-42',
+    });
+  });
+
+  it('includes ancestorTitles from the tracked describe stack in the registration-time sidecar', () => {
+    mockedDescribeStack.getDescribeStack.mockReturnValue(['login']);
+
+    withMockedGlobalTest(() => {
+      testpulse('LOGIN-42')('succeeds with valid creds', jest.fn());
+    });
+
+    const fullName = 'login succeeds with valid creds';
+    const sidecarPath = path.join(casesDir(tmpDir), `${hashFullName(fullName)}.json`);
+    expect(fs.existsSync(sidecarPath)).toBe(true);
+    expect(JSON.parse(fs.readFileSync(sidecarPath, 'utf8')).fullName).toBe(fullName);
   });
 
   it('registers the test with its title unchanged', () => {

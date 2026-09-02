@@ -20,6 +20,7 @@ module.exports = {
       {
         outputDirectory: __dirname,
         outputName: 'junit.xml',
+        suiteNameTemplate: '{filepath}',
         testCasePropertiesDirectory: path.dirname(propsPath),
         testCasePropertiesFile: path.basename(propsPath),
       },

@@ -1,7 +1,6 @@
-// Fixture project for the submission end-to-end test
-// (test/e2e/submission.e2e.test.ts). url/project/token are supplied via
-// TESTPULSE_URL/TESTPULSE_PROJECT/TESTPULSE_TOKEN env vars by the spawning
-// test, not hardcoded here, since the stub server's port is dynamic.
+// Deliberately WRONG reporter order (testpulse-jest before jest-junit) --
+// used by test/e2e/submission.e2e.test.ts's staleness-detection test to
+// prove a pre-existing junit.xml doesn't get silently resubmitted.
 const path = require('path');
 
 const propsPath = path.join(__dirname, '../../../dist/junitTestCaseProperties.js');
@@ -11,6 +10,7 @@ module.exports = {
   rootDir: __dirname,
   reporters: [
     'default',
+    [reporterPath, { scratchDir: path.join(__dirname, '.testpulse') }],
     [
       'jest-junit',
       {
@@ -21,6 +21,5 @@ module.exports = {
         testCasePropertiesFile: path.basename(propsPath),
       },
     ],
-    [reporterPath, { scratchDir: path.join(__dirname, '.testpulse') }],
   ],
 };

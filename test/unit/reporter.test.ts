@@ -54,6 +54,27 @@ describe('TestPulseReporter', () => {
     await expect(reporter.onRunComplete()).rejects.toThrow(/reporters.*array|jest-junit/i);
   });
 
+  it('refuses a JUnit file older than the current run (stale from a prior run)', async () => {
+    fs.writeFileSync(junitFile, '<testsuites></testsuites>');
+    const oldTime = new Date(Date.now() - 60_000);
+    fs.utimesSync(junitFile, oldTime, oldTime);
+
+    const reporter = makeReporter(tmpDir, junitFile);
+    await expect(reporter.onRunComplete(undefined, { startTime: Date.now() })).rejects.toThrow(/stale|older than this test run/i);
+    expect(mockedHttpClient.postImport).not.toHaveBeenCalled();
+  });
+
+  it('accepts a JUnit file freshly written for the current run', async () => {
+    mockedHttpClient.postImport.mockResolvedValue({ status: 201, body: { id: 'RUN-1' } });
+    const runStartTime = Date.now() - 5000;
+    fs.writeFileSync(junitFile, '<testsuites></testsuites>'); // written "now", after runStartTime
+
+    const reporter = makeReporter(tmpDir, junitFile);
+    await reporter.onRunComplete(undefined, { startTime: runStartTime });
+
+    expect(mockedHttpClient.postImport).toHaveBeenCalled();
+  });
+
   it('joins attachments to their case key by fullName and submits base64 data', async () => {
     fs.writeFileSync(junitFile, '<testsuites></testsuites>');
     writeCaseMetadata(tmpDir, 'fails with bad password', 'LOGIN-42');
@@ -155,6 +176,16 @@ describe('TestPulseReporter', () => {
 
     expect(process.exitCode).toBe(1);
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('ECONNREFUSED'));
+  });
+
+  it('does NOT remove the scratch directory after a failed submission (401), even without keepScratchDir', async () => {
+    fs.writeFileSync(junitFile, '<testsuites></testsuites>');
+    mockedHttpClient.postImport.mockResolvedValue({ status: 401, body: { error: 'unauthorized' } });
+
+    const reporter = makeReporter(tmpDir, junitFile);
+    await reporter.onRunComplete();
+
+    expect(fs.existsSync(tmpDir)).toBe(true);
   });
 
   it('removes the scratch directory after a successful run unless keepScratchDir is set', async () => {

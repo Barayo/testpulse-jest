@@ -74,3 +74,37 @@ describe('reporter submission end-to-end', () => {
     expect(result.exitCode).toBe(0);
   });
 });
+
+describe('reporter staleness detection (misordered reporters + a pre-existing junit.xml)', () => {
+  const MISORDERED_DIR = path.join(__dirname, '../fixtures/submit-misordered');
+  const MISORDERED_CONFIG = path.join(MISORDERED_DIR, 'jest.config.js');
+  const MISORDERED_JUNIT = path.join(MISORDERED_DIR, 'junit.xml');
+  const MISORDERED_SCRATCH = path.join(MISORDERED_DIR, '.testpulse');
+
+  let server: StubImportServer;
+
+  afterEach(async () => {
+    fs.rmSync(MISORDERED_JUNIT, { force: true });
+    fs.rmSync(MISORDERED_SCRATCH, { recursive: true, force: true });
+    if (server) await server.close();
+  });
+
+  it('refuses to submit a stale pre-existing junit.xml when reporters are listed in the wrong order', async () => {
+    // Seed a stale junit.xml from a "prior run", with an old mtime.
+    fs.writeFileSync(MISORDERED_JUNIT, '<testsuites name="stale prior run"></testsuites>');
+    const oldTime = new Date(Date.now() - 60_000);
+    fs.utimesSync(MISORDERED_JUNIT, oldTime, oldTime);
+
+    server = await startStubImportServer(201, { id: 'SHOULD-NOT-BE-CREATED' });
+
+    const result = await runNestedJest(MISORDERED_DIR, MISORDERED_CONFIG, {
+      TESTPULSE_URL: server.url,
+      TESTPULSE_PROJECT: 'FIXTURE',
+      TESTPULSE_TOKEN: 't0k3n',
+    });
+
+    // Must fail loudly, not silently submit the stale file.
+    expect(result.exitCode).not.toBe(0);
+    expect(server.requests).toHaveLength(0);
+  });
+});

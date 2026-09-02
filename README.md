@@ -36,6 +36,10 @@ module.exports = {
     'default',
     ['jest-junit', {
       outputName: 'junit.xml',
+      // jest-junit's default suiteNameTemplate ("{title}") resolves to the
+      // literal string "undefined" for a flat test() with no enclosing
+      // describe() -- {filepath} always names the run meaningfully.
+      suiteNameTemplate: '{filepath}',
       testCasePropertiesDirectory: path.dirname(propsPath),
       testCasePropertiesFile: path.basename(propsPath),
     }],

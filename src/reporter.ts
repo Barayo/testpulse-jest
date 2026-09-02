@@ -27,7 +27,7 @@ export default class TestPulseReporter {
     fs.mkdirSync(attachmentsDir(this.config.scratchDir), { recursive: true });
   }
 
-  async onRunComplete(): Promise<void> {
+  async onRunComplete(_contexts?: unknown, results?: { startTime?: number }): Promise<void> {
     const config = this.config;
 
     if (config.dryRun) {
@@ -41,7 +41,7 @@ export default class TestPulseReporter {
       );
     }
 
-    const junitReport = this.readJunitReport(config.junitFile);
+    const junitReport = this.readJunitReport(config.junitFile, results?.startTime);
     const attachments = this.buildAttachments(config.scratchDir);
 
     let status: number;
@@ -54,17 +54,40 @@ export default class TestPulseReporter {
       process.exitCode = 1;
       return;
     }
-    this.handleSubmissionResult(status, body, config);
-    this.cleanup(config);
+    const succeeded = this.handleSubmissionResult(status, body, config);
+    // Only clean up on a successful submission (201/207) -- a failed one
+    // leaves the scratch dir in place (subject to keepScratchDir's normal
+    // meaning) so its contents are actually inspectable when debugging the
+    // one situation you'd most want them: a failure.
+    if (succeeded) this.cleanup(config);
   }
 
-  private readJunitReport(junitFile: string): string {
+  private readJunitReport(junitFile: string, runStartTime?: number): string {
     if (!fs.existsSync(junitFile)) {
       throw new Error(
         `testpulse-jest: no JUnit report found at "${junitFile}". Check that "testpulse-jest" is listed AFTER ` +
           '"jest-junit" in your jest.config.js "reporters" array, and that jest-junit is configured to write to this path.'
       );
     }
+
+    // A reporters-ordering mistake ("testpulse-jest" before "jest-junit")
+    // combined with a pre-existing junit.xml from a prior run (a common,
+    // ordinary situation -- local dev re-running jest in the same
+    // directory, a reused CI workspace) would otherwise mean this reporter
+    // reads and silently submits the OLD report, with no error at all,
+    // even though the current run's real results are different. Comparing
+    // the file's mtime against this run's own startTime catches that.
+    if (typeof runStartTime === 'number') {
+      const mtimeMs = fs.statSync(junitFile).mtimeMs;
+      if (mtimeMs < runStartTime) {
+        throw new Error(
+          `testpulse-jest: the JUnit report at "${junitFile}" is older than this test run -- it wasn't ` +
+            'refreshed by jest-junit before this reporter read it. Check that "testpulse-jest" is listed AFTER ' +
+            '"jest-junit" in your jest.config.js "reporters" array. Refusing to submit a stale report.'
+        );
+      }
+    }
+
     return fs.readFileSync(junitFile, 'utf8');
   }
 
@@ -84,12 +107,13 @@ export default class TestPulseReporter {
     return attachments;
   }
 
-  private handleSubmissionResult(status: number, body: unknown, config: ResolvedConfig): void {
+  /** Returns whether the submission itself succeeded (a run was created), independent of failOnUnmatched's effect on exit code. */
+  private handleSubmissionResult(status: number, body: unknown, config: ResolvedConfig): boolean {
     if (status === 201) {
       const run = body as { id?: string } | undefined;
       // eslint-disable-next-line no-console
       console.log(`testpulse-jest: submitted successfully (run ${run?.id ?? '?'})`);
-      return;
+      return true;
     }
 
     if (status === 207) {
@@ -101,12 +125,13 @@ export default class TestPulseReporter {
           'Set failOnUnmatched (or TESTPULSE_FAIL_ON_UNMATCHED) to make this a hard failure.'
       );
       if (config.failOnUnmatched) process.exitCode = 1;
-      return;
+      return true;
     }
 
     // eslint-disable-next-line no-console
     console.error(`testpulse-jest: submission failed (status ${status}): ${JSON.stringify(body)}`);
     process.exitCode = 1;
+    return false;
   }
 
   private async runDryRun(config: ResolvedConfig): Promise<void> {
