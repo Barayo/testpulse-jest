@@ -1,6 +1,6 @@
 {
   "name": "testpulse-jest",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Jest reporter + jest-junit companion for reporting test results into TestPulse",
   "license": "MIT",
   "repository": {
@@ -9,7 +9,13 @@
   },
   "homepage": "https://github.com/Barayo/testpulse-jest#readme",
   "bugs": "https://github.com/Barayo/testpulse-jest/issues",
-  "keywords": ["jest", "jest-reporter", "testpulse", "junit", "test-management"],
+  "keywords": [
+    "jest",
+    "jest-reporter",
+    "testpulse",
+    "junit",
+    "test-management"
+  ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -22,7 +28,9 @@
       "require": "./dist/junitTestCaseProperties.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "engines": {
     "node": ">=18"
   },
