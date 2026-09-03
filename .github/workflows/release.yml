@@ -25,6 +25,8 @@ jobs:
         with:
           node-version: "20"
           registry-url: https://registry.npmjs.org
+      - name: Upgrade npm (trusted publishing/OIDC needs npm >= 11.5.1; Node 20's bundled npm is older)
+        run: npm install -g npm@11
       - run: npm ci
       - run: npm run build
       - name: Semantic release (version, changelog, tag, GitHub release, publish to npm via OIDC trusted publishing)
