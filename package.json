@@ -1,6 +1,6 @@
 {
   "name": "testpulse-jest",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Jest reporter + jest-junit companion for reporting test results into TestPulse",
   "license": "MIT",
   "repository": {
